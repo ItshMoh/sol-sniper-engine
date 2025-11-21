@@ -40,6 +40,7 @@ async function initSolana() {
 
 // Create Fastify app
 const app = Fastify({
+  trustProxy: true,
   logger: {
     level: 'info',
     transport: {

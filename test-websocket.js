@@ -1,62 +1,47 @@
-const WebSocket = require('ws');
+import WebSocket from 'ws';
 
-// First, submit an order
-fetch('http://localhost:3000/api/orders/execute', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    tokenAddress: 'TestToken987654321',
-    amountIn: 0.5,
-    slippage: 3
-  })
-})
-.then(res => res.json())
-.then(data => {
-  console.log('\n[HTTP] Order submitted:', data);
-  console.log('[HTTP] OrderId:', data.orderId);
-  console.log('\n[WS] Connecting to WebSocket...\n');
+const WS_URL = 'wss://sol-sniper-engine-production.up.railway.app/api/orders/execute';
 
-  // Connect to WebSocket
-  const ws = new WebSocket(data.wsUrl);
+console.log('Connecting to WebSocket:', WS_URL);
 
-  ws.on('open', () => {
-    console.log('[WS] Connected to order status stream\n');
-  });
+const ws = new WebSocket(WS_URL);
 
-  ws.on('message', (message) => {
-    const data = JSON.parse(message);
-    console.log(`[${new Date().toLocaleTimeString()}] Status: ${data.status}`);
-    if (data.message) {
-      console.log(`  Message: ${data.message}`);
-    }
-    if (data.routing) {
-      console.log(`  Raydium: ${data.routing.raydium.outputAmount.toFixed(2)} tokens`);
-      console.log(`  Meteora: ${data.routing.meteora.outputAmount.toFixed(2)} tokens`);
-      console.log(`  Selected: ${data.routing.selected}`);
-    }
-    if (data.txHash) {
-      console.log(`  TxHash: ${data.txHash}`);
-      console.log(`  Explorer: ${data.explorerUrl}`);
-    }
-    console.log('');
+ws.on('open', () => {
+  console.log('✅ WebSocket connected!');
+  console.log('Sending order...\n');
 
-    // Close after confirmed or failed
-    if (data.status === 'confirmed' || data.status === 'failed') {
-      console.log('[WS] Order complete, closing connection\n');
-      ws.close();
-    }
-  });
+  // Send a test order
+  const order = {
+    tokenAddress: 'So11111111111111111111111111111111111111112',
+    amountIn: '0.01',
+    slippage: '5'
+  };
 
-  ws.on('close', () => {
-    console.log('[WS] Connection closed');
-    process.exit(0);
-  });
-
-  ws.on('error', (err) => {
-    console.error('[WS] Error:', err.message);
-  });
-})
-.catch(err => {
-  console.error('Error:', err);
-  process.exit(1);
+  ws.send(JSON.stringify(order));
+  console.log('📤 Sent order:', order);
 });
+
+ws.on('message', (data) => {
+  console.log('\n📥 Received message:');
+  try {
+    const message = JSON.parse(data.toString());
+    console.log(JSON.stringify(message, null, 2));
+  } catch (e) {
+    console.log(data.toString());
+  }
+});
+
+ws.on('error', (error) => {
+  console.error('❌ WebSocket error:', error.message);
+});
+
+ws.on('close', (code, reason) => {
+  console.log(`\n🔌 WebSocket closed. Code: ${code}, Reason: ${reason || 'No reason provided'}`);
+  process.exit(0);
+});
+
+// Auto-close after 30 seconds
+setTimeout(() => {
+  console.log('\n⏱️  Test timeout (30s), closing connection...');
+  ws.close();
+}, 30000);
