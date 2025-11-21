@@ -1,10 +1,15 @@
 import { describe, it, expect, jest, beforeAll, beforeEach } from '@jest/globals';
 import BN from 'bn.js';
 
-const mockCheckRaydiumPoolExists = jest.fn();
-const mockGetRaydiumSwapQuote = jest.fn();
-const mockCheckMeteoraPoolExists = jest.fn();
-const mockGetMeteoraSwapQuote = jest.fn();
+type CheckRaydiumPoolExists = typeof import('../src/integrations/raydium.ts')['checkRaydiumPoolExists'];
+type GetRaydiumSwapQuote = typeof import('../src/integrations/raydium.ts')['getRaydiumSwapQuote'];
+type CheckMeteoraPoolExists = typeof import('../src/integrations/meteora.ts')['checkMeteoraPoolExists'];
+type GetMeteoraSwapQuote = typeof import('../src/integrations/meteora.ts')['getMeteoraSwapQuote'];
+
+const mockCheckRaydiumPoolExists = jest.fn() as jest.MockedFunction<CheckRaydiumPoolExists>;
+const mockGetRaydiumSwapQuote = jest.fn() as jest.MockedFunction<GetRaydiumSwapQuote>;
+const mockCheckMeteoraPoolExists = jest.fn() as jest.MockedFunction<CheckMeteoraPoolExists>;
+const mockGetMeteoraSwapQuote = jest.fn() as jest.MockedFunction<GetMeteoraSwapQuote>;
 
 const raydiumModulePromise = jest.unstable_mockModule('../src/integrations/raydium.ts', () => ({
   checkRaydiumPoolExists: mockCheckRaydiumPoolExists,
@@ -37,8 +42,18 @@ beforeEach(() => {
   mockGetRaydiumSwapQuote.mockReset();
   mockGetMeteoraSwapQuote.mockReset();
 
-  mockCheckRaydiumPoolExists.mockResolvedValue({ exists: false, poolId: null });
-  mockCheckMeteoraPoolExists.mockResolvedValue({ exists: false, poolId: null });
+  mockCheckRaydiumPoolExists.mockResolvedValue({
+    poolId: '',
+    tokenAMint: '',
+    tokenBMint: '',
+    exists: false,
+  });
+  mockCheckMeteoraPoolExists.mockResolvedValue({
+    poolId: '',
+    tokenAMint: '',
+    tokenBMint: '',
+    exists: false,
+  });
 });
 
 describe('DEX Router Tests', () => {
@@ -47,6 +62,8 @@ describe('DEX Router Tests', () => {
       mockCheckRaydiumPoolExists.mockResolvedValue({
         exists: true,
         poolId: 'raydium-pool-123',
+        tokenAMint: 'mint-a',
+        tokenBMint: 'mint-b',
       });
 
       const result = await checkForPool('token-address-123');
@@ -59,6 +76,8 @@ describe('DEX Router Tests', () => {
       mockCheckMeteoraPoolExists.mockResolvedValue({
         exists: true,
         poolId: 'meteora-pool-456',
+        tokenAMint: 'mint-a',
+        tokenBMint: 'mint-b',
       });
 
       const result = await checkForPool('token-address-456');
@@ -68,8 +87,18 @@ describe('DEX Router Tests', () => {
     });
 
     it('should return not found when no pools exist', async () => {
-      mockCheckRaydiumPoolExists.mockResolvedValue({ exists: false, poolId: null });
-      mockCheckMeteoraPoolExists.mockResolvedValue({ exists: false, poolId: null });
+      mockCheckRaydiumPoolExists.mockResolvedValue({
+        exists: false,
+        poolId: '',
+        tokenAMint: '',
+        tokenBMint: '',
+      });
+      mockCheckMeteoraPoolExists.mockResolvedValue({
+        exists: false,
+        poolId: '',
+        tokenAMint: '',
+        tokenBMint: '',
+      });
 
       const result = await checkForPool('non-existent-token');
 
@@ -83,14 +112,20 @@ describe('DEX Router Tests', () => {
     it('should select Raydium when it has better output', async () => {
       mockGetRaydiumSwapQuote.mockResolvedValue({
         dex: 'raydium',
+        poolId: 'raydium-pool',
+        inputAmount: new BN('10000000'),
         outputAmount: new BN('10000000'),
+        minOutputAmount: new BN('9900000'),
         tradeFee: new BN('250000'),
         priceImpact: 5.0,
       });
 
       mockGetMeteoraSwapQuote.mockResolvedValue({
         dex: 'meteora',
+        poolId: 'meteora-pool',
+        inputAmount: new BN('10000000'),
         outputAmount: new BN('9000000'),
+        minOutputAmount: new BN('8900000'),
         tradeFee: new BN('200000'),
         priceImpact: 4.5,
       });
@@ -105,14 +140,20 @@ describe('DEX Router Tests', () => {
     it('should select Meteora when it has better output', async () => {
       mockGetRaydiumSwapQuote.mockResolvedValue({
         dex: 'raydium',
+        poolId: 'raydium-pool',
+        inputAmount: new BN('10000000'),
         outputAmount: new BN('9000000'),
+        minOutputAmount: new BN('8800000'),
         tradeFee: new BN('250000'),
         priceImpact: 5.0,
       });
 
       mockGetMeteoraSwapQuote.mockResolvedValue({
         dex: 'meteora',
+        poolId: 'meteora-pool',
+        inputAmount: new BN('10000000'),
         outputAmount: new BN('10000000'),
+        minOutputAmount: new BN('9800000'),
         tradeFee: new BN('200000'),
         priceImpact: 4.5,
       });
@@ -127,7 +168,10 @@ describe('DEX Router Tests', () => {
     it('should handle when only Raydium is available', async () => {
       mockGetRaydiumSwapQuote.mockResolvedValue({
         dex: 'raydium',
+        poolId: 'raydium-pool',
+        inputAmount: new BN('10000000'),
         outputAmount: new BN('10000000'),
+        minOutputAmount: new BN('9900000'),
         tradeFee: new BN('250000'),
         priceImpact: 5.0,
       });
@@ -146,7 +190,10 @@ describe('DEX Router Tests', () => {
 
       mockGetMeteoraSwapQuote.mockResolvedValue({
         dex: 'meteora',
+        poolId: 'meteora-pool',
+        inputAmount: new BN('10000000'),
         outputAmount: new BN('10000000'),
+        minOutputAmount: new BN('9800000'),
         tradeFee: new BN('200000'),
         priceImpact: 4.5,
       });
