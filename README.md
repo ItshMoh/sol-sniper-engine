@@ -106,20 +106,27 @@ Server starts at `http://localhost:3000`
 ### Quick Start
 
 1. **Import Collection**: Import `postman-collection.json` into Postman
-2. **Health Check**: Test `/health` endpoint to verify all services are running
-3. **Submit Order**: Choose either HTTP POST or WebSocket upgrade pattern
+2. **Run Health Check** - Verify server and all services are running
+3. **Submit Order** - POST request returns orderId and WebSocket URL
+4. **Connect WebSocket Manually** - See live status updates
 
-### How to Submit Orders (HTTP POST → WebSocket Pattern)
+---
 
-The API implements the **HTTP POST → WebSocket pattern** required by the task:
+## 📡 API Endpoints
 
-#### Step 1: Submit Order via HTTP POST
+### Single Endpoint Pattern
 
-**In Postman**:
+The API uses **ONE endpoint** `/api/orders/execute` that handles both protocols:
 
-1. Create POST request to `http://localhost:3000/api/orders/execute`
-2. Set header: `Content-Type: application/json`
-3. Body (raw JSON):
+✅ **Task Requirement**: "Single endpoint handles both protocols"
+
+---
+
+### 1️⃣ Submit Order (HTTP POST)
+
+**Endpoint**: `POST /api/orders/execute`
+
+**Request Body**:
 ```json
 {
   "tokenAddress": "B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP",
@@ -127,31 +134,41 @@ The API implements the **HTTP POST → WebSocket pattern** required by the task:
   "slippage": "0.01"
 }
 ```
-4. Click **Send**
 
 **Response** (HTTP 200):
 ```json
 {
   "orderId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "pending",
-  "message": "Order queued successfully. Connect to WebSocket for live updates.",
-  "wsUrl": "ws://localhost:3000/ws/orders/550e8400-e29b-41d4-a716-446655440000"
+  "message": "Order queued. Upgrade connection to WebSocket for live updates.",
+  "upgradeUrl": "ws://localhost:3000/api/orders/execute?orderId=550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-✅ **Task Requirement Met**: "User submits order via POST /api/orders/execute"
-✅ **Task Requirement Met**: "API validates order and returns orderId"
+✅ **Task Requirement**: "User submits order via POST /api/orders/execute"
+✅ **Task Requirement**: "API validates order and returns orderId"
+
+**Testing in Postman**:
+1. Use the "2. Submit Order (HTTP POST)" request from the collection
+2. The response automatically saves `orderId` and `upgradeUrl` to environment variables
+3. Copy the `upgradeUrl` from the response
 
 ---
 
-#### Step 2: Connect to WebSocket for Live Updates
+### 2️⃣ Stream Updates (WebSocket)
 
-**In Postman**:
+**Endpoint**: `GET ws://localhost:3000/api/orders/execute?orderId={orderId}`
 
-1. Create new **WebSocket Request**
-2. Copy the `wsUrl` from Step 1 response
-3. Paste into WebSocket URL field
+✅ **Task Requirement**: "Connection upgrades to WebSocket for status streaming"
+
+**Note**: Same endpoint path (`/api/orders/execute`) - only the protocol changes (HTTP → WebSocket)
+
+**Testing in Postman**:
+1. After submitting order via POST, copy the `upgradeUrl` from response
+2. In Postman: **New** → **WebSocket Request**
+3. Paste the `upgradeUrl`
 4. Click **Connect**
+5. Watch live status updates stream in real-time!
 
 ---
 
@@ -246,27 +263,74 @@ You'll see messages streaming in the response pane:
 
 Click the `explorerUrl` link to see the actual transaction on Solana Explorer!
 
+---
+
+### 3️⃣ Get Order Status (HTTP GET)
+
+**Endpoint**: `GET /api/orders/{orderId}`
+
+**Use Case**: Check order status after WebSocket disconnection or retrieve final transaction hash
+
+**Response**:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "confirmed",
+  "token_address": "B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP",
+  "amount_in": "100000000",
+  "slippage": "0.01",
+  "selected_dex": "raydium",
+  "tx_hash": "yvkcasJTugoxSYnzGSbDsVUdeyjxi3kQebdZMmmbTZi...",
+  "error_message": null,
+  "created_at": "2025-01-21T20:30:00.000Z",
+  "updated_at": "2025-01-21T20:30:18.000Z"
+}
+```
+
+---
+
+### 4️⃣ Health Check (HTTP GET)
+
+**Endpoint**: `GET /health`
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-21T20:30:00.000Z",
+  "services": {
+    "postgres": "connected",
+    "redis": "connected",
+    "queue": "running"
+  }
+}
+```
+
+---
+
+## 🧪 Testing Scenarios
+
 ### Testing Concurrent Orders
 
-To test concurrent processing:
+To test concurrent processing (up to 10 concurrent, 100/minute):
 
-1. Open **5 WebSocket tabs** in Postman
-2. Connect all 5 to `ws://localhost:3000/api/orders/execute`
-3. Send order JSON to all 5 simultaneously
-4. Watch them process concurrently with different routing decisions
+1. Submit **5 orders** via POST endpoint (rapid fire)
+2. For each order, connect to its WebSocket URL
+3. Watch them process concurrently with different routing decisions
+4. Observe queue management in server logs
 
 ### Testing Error Cases
 
 **Invalid Order Data:**
 
+POST with missing fields:
 ```json
 {
   "tokenAddress": "invalid"
 }
 ```
 
-Expected response:
-
+Returns HTTP 400:
 ```json
 {
   "error": "Invalid order",
@@ -276,6 +340,7 @@ Expected response:
 
 **Pool Not Found:**
 
+POST with non-existent token:
 ```json
 {
   "tokenAddress": "NonExistentTokenMint111111111111111111",
@@ -284,37 +349,7 @@ Expected response:
 }
 ```
 
-Will show `"status": "failed"` with error message.
-
-### HTTP Endpoints
-
-**Get Order Status** (After order is placed):
-
-```
-GET http://localhost:3000/api/orders/{orderId}
-```
-
-Returns order details from PostgreSQL.
-
-**Health Check**:
-
-```
-GET http://localhost:3000/health
-```
-
-Returns:
-
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-01-21T...",
-  "services": {
-    "postgres": "connected",
-    "redis": "connected",
-    "queue": "running"
-  }
-}
-```
+Order will transition to `"status": "failed"` via WebSocket with error message.
 
 ## 📊 Order Lifecycle States
 
@@ -381,6 +416,44 @@ Selected: Raydium (Better output by 18%)
 - Ensure PostgreSQL is running: `docker ps`
 - Test connection: `psql -h localhost -U postgres -d sniper_engine`
 
+---
+
+## ✅ Core Requirements Compliance
+
+### 1. Order Types (Choose ONE) ✅
+**Implemented**: Sniper Orders - Execute on token launch/pool creation
+
+**Why Chosen**: Sniper orders demonstrate the most complex execution flow including pool monitoring, instant execution, and real-world trading scenarios.
+
+**Extension to Other Types**:
+- **Market Orders**: Remove "monitoring" state from `order-processor.ts:47-56`. Execute immediately at current price.
+- **Limit Orders**: Replace "monitoring" with price polling. Add `targetPrice` field and check `bestRoute.selectedQuote.price <= targetPrice` before executing.
+
+### 2. DEX Router Implementation 
+- ✅ Query both Raydium and Meteora for quotes (`dex-router.ts:76-107`)
+- ✅ Route to best price automatically (compare `outputAmount`)
+- ✅ Handle wrapped SOL for native token swaps (handled by SDKs)
+- ✅ Log routing decisions for transparency (Pino structured logs)
+
+**Implementation**: `src/services/dex-router.ts`
+
+### 3. HTTP → WebSocket Pattern 
+- ✅ Single endpoint handles both protocols (`/api/orders/execute`)
+- ✅ Initial POST returns `orderId` (`routes/orders.ts:17-53`)
+- ✅ Connection upgrades to WebSocket for status streaming (`routes/orders.ts:57-97`)
+
+**Implementation**: `src/routes/orders.ts`
+
+### 4. Concurrent Processing 
+- ✅ Queue system managing up to 10 concurrent orders (BullMQ)
+- ✅ Process 100 orders/minute (rate limiter: `order-processor.ts:169-172`)
+- ✅ Exponential back-off retry ≤3 attempts (`order-processor.ts:179-183`)
+- ✅ Emit "failed" status and persist failure reason (`order-processor.ts:145-151`)
+
+**Implementation**: `src/services/order-processor.ts`
+
+---
+
 ## 📝 Environment Variables Reference
 
 | Variable               | Description                          | Default                          |
@@ -405,8 +478,3 @@ Selected: Raydium (Better output by 18%)
 - **Postman Collection**: `postman-collection.json`
 - **Test Pools**: `test-pools.json`
 - **Transaction Examples**: See Solana Explorer links in WebSocket responses
-
-## 📄 License
-
-MIT
-
