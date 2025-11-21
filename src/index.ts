@@ -61,6 +61,7 @@ app.register(websocket);
 const redisConnection = new Redis({
   host: CONFIG.redis.host,
   port: CONFIG.redis.port,
+  ...(CONFIG.redis.password && { password: CONFIG.redis.password }),
   maxRetriesPerRequest: null,
 });
 
