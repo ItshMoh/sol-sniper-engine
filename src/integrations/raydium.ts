@@ -18,7 +18,7 @@ import type {
   CpmmParsedRpcData,
 } from '@raydium-io/raydium-sdk-v2';
 import BN from 'bn.js';
-import type { DexConfig, SwapQuote, SwapResult, PoolInfo } from '../types.js';
+import type { DexConfig, SwapQuote, SwapResult, PoolInfo } from '../types.ts';
 
 let raydiumInstance: Raydium | null = null;
 

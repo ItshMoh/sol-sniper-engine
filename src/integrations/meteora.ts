@@ -2,7 +2,7 @@ import { PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { CpAmm } from '@meteora-ag/cp-amm-sdk';
 import BN from 'bn.js';
-import type { DexConfig, SwapQuote, SwapResult, PoolInfo } from '../types.js';
+import type { DexConfig, SwapQuote, SwapResult, PoolInfo } from '../types.ts';
 
 let meteoraInstance: CpAmm | null = null;
 let meteoraConfig: DexConfig | null = null;

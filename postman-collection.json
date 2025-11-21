@@ -1,43 +1,87 @@
 {
   "info": {
     "name": "Sniper Order Execution Engine",
-    "description": "API collection for testing the sniper order execution engine with WebSocket-based order submission",
+    "description": "Single endpoint pattern: POST /api/orders/execute returns orderId, then upgrade to WebSocket for live updates",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "WebSocket - Submit Order & Stream Updates",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "ws://localhost:3000/api/orders/execute",
-          "protocol": "ws",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "orders", "execute"]
-        },
-        "description": "PRIMARY ENDPOINT: WebSocket connection for submitting orders and receiving real-time updates.\n\nHOW TO USE IN POSTMAN:\n1. Create a new 'WebSocket Request' in Postman\n2. Connect to: ws://localhost:3000/api/orders/execute\n3. Once connected, send this JSON message:\n\n{\n  \"tokenAddress\": \"B2DdhSFkydrDMbeamxnVyxiZNABVPoTFJjZKzSc1G3DP\",\n  \"amountIn\": \"100000000\",\n  \"slippage\": \"0.01\"\n}\n\n4. You'll receive ALL status updates in real-time:\n   - pending: Order queued\n   - monitoring: Checking for pools\n   - triggered: Pool detected\n   - routing: Comparing Raydium vs Meteora (with full quotes)\n   - building: Building transaction\n   - submitted: Transaction sent to blockchain\n   - confirmed: Success with txHash and Explorer link\n   - OR failed: Error details\n\nNO MISSED UPDATES - all status changes stream on the same connection!"
-      },
-      "response": []
-    },
-    {
-      "name": "HTTP POST - Submit Order (NOT SUPPORTED)",
+      "name": "1. Health Check",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Returns 400 error', function() {",
-              "    pm.response.to.have.status(400);",
-              "});",
-              "",
               "const response = pm.response.json();",
-              "pm.test('Asks for WebSocket connection', function() {",
-              "    pm.expect(response.error).to.equal('WebSocket connection required');",
+              "",
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
               "});",
               "",
-              "console.log('Error message:', response.message);"
+              "pm.test('Service is healthy', function() {",
+              "    pm.expect(response.status).to.equal('healthy');",
+              "});",
+              "",
+              "pm.test('All services connected', function() {",
+              "    pm.expect(response.services.postgres).to.equal('connected');",
+              "    pm.expect(response.services.redis).to.equal('connected');",
+              "    pm.expect(response.services.queue).to.equal('running');",
+              "});",
+              "",
+              "console.log('✅ Health Status:', response.status);",
+              "console.log('Services:', JSON.stringify(response.services, null, 2));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["health"]
+        },
+        "description": "✅ START HERE: Check server health before testing\n\nVerifies:\n- PostgreSQL connection\n- Redis connection\n- BullMQ queue status"
+      },
+      "response": []
+    },
+    {
+      "name": "2. Submit Order (HTTP POST)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "",
+              "pm.test('Status code is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has orderId', function() {",
+              "    pm.expect(response.orderId).to.be.a('string');",
+              "});",
+              "",
+              "pm.test('Status is pending', function() {",
+              "    pm.expect(response.status).to.equal('pending');",
+              "});",
+              "",
+              "pm.test('Response has upgradeUrl', function() {",
+              "    pm.expect(response.upgradeUrl).to.be.a('string');",
+              "});",
+              "",
+              "// Save orderId and upgradeUrl to environment",
+              "pm.environment.set('orderId', response.orderId);",
+              "pm.environment.set('upgradeUrl', response.upgradeUrl);",
+              "",
+              "console.log('✅ Order ID:', response.orderId);",
+              "console.log('📡 WebSocket URL:', response.upgradeUrl);",
+              "console.log('');",
+              "console.log('NEXT STEP: Use request #3 (WebSocket) to connect and see live updates!');"
             ],
             "type": "text/javascript"
           }
@@ -62,12 +106,12 @@
           "port": "3000",
           "path": ["api", "orders", "execute"]
         },
-        "description": "This endpoint returns an error. Orders must be submitted via WebSocket to receive live updates.\n\nThis test verifies that the API correctly rejects HTTP POST requests."
+        "description": "📝 STEP 1: Submit order via HTTP POST\n\nTask Requirement: \"User submits order via POST /api/orders/execute\"\n\n✅ Returns orderId\n✅ Returns upgradeUrl for WebSocket connection\n\nAfter running this request:\n1. Copy the upgradeUrl from response\n2. In Postman: New → WebSocket Request\n3. Paste the upgradeUrl and Click 'Connect'\n4. Watch live status updates stream in real-time!\n\n⏱️ Total execution: ~15-20 seconds\n\n🎬 LIVE UPDATES YOU'LL SEE:\n- pending → monitoring → triggered → routing (with DEX comparison) → building → submitted → confirmed (with txHash)"
       },
       "response": []
     },
     {
-      "name": "Get Order Status",
+      "name": "3. Get Order Status (HTTP GET)",
       "event": [
         {
           "listen": "test",
@@ -86,9 +130,17 @@
               "});",
               "",
               "console.log('Order Status:', response.status);",
+              "console.log('Token:', response.token_address);",
+              "console.log('Amount:', response.amount_in);",
+              "console.log('Selected DEX:', response.selected_dex);",
+              "",
               "if (response.tx_hash) {",
-              "    console.log('Transaction Hash:', response.tx_hash);",
-              "    console.log('Explorer:', 'https://explorer.solana.com/tx/' + response.tx_hash + '?cluster=devnet');",
+              "    console.log('✅ Transaction Hash:', response.tx_hash);",
+              "    console.log('🔍 Explorer:', 'https://explorer.solana.com/tx/' + response.tx_hash + '?cluster=devnet');",
+              "}",
+              "",
+              "if (response.error_message) {",
+              "    console.log('❌ Error:', response.error_message);",
               "}"
             ],
             "type": "text/javascript"
@@ -105,51 +157,7 @@
           "port": "3000",
           "path": ["api", "orders", "{{orderId}}"]
         },
-        "description": "Get the current status of an order by orderId.\n\nUseful for checking order status after WebSocket disconnection.\n\nReplace {{orderId}} with an actual order ID from a previous WebSocket submission."
-      },
-      "response": []
-    },
-    {
-      "name": "Health Check",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "const response = pm.response.json();",
-              "",
-              "pm.test('Status code is 200', function() {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "",
-              "pm.test('Service is healthy', function() {",
-              "    pm.expect(response.status).to.equal('healthy');",
-              "});",
-              "",
-              "pm.test('All services connected', function() {",
-              "    pm.expect(response.services.postgres).to.equal('connected');",
-              "    pm.expect(response.services.redis).to.equal('connected');",
-              "    pm.expect(response.services.queue).to.equal('running');",
-              "});",
-              "",
-              "console.log('Health Status:', response.status);",
-              "console.log('Services:', JSON.stringify(response.services, null, 2));"
-            ],
-            "type": "text/javascript"
-          }
-        }
-      ],
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:3000/health",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["health"]
-        },
-        "description": "Check the health status of the server and all connected services (PostgreSQL, Redis, Queue)."
+        "description": "📊 STEP 2 (Optional): Check order status via HTTP\n\nUseful for:\n- Checking status after WebSocket disconnection\n- Retrieving transaction hash\n- Debugging failed orders\n\nReturns full order details from PostgreSQL"
       },
       "response": []
     }
@@ -159,7 +167,13 @@
       "key": "orderId",
       "value": "",
       "type": "string",
-      "description": "Order ID from WebSocket response - use for Get Order Status endpoint"
+      "description": "Order ID from POST request - automatically saved"
+    },
+    {
+      "key": "upgradeUrl",
+      "value": "",
+      "type": "string",
+      "description": "WebSocket URL from POST request - automatically saved"
     }
   ],
   "event": [
@@ -168,8 +182,9 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// This collection uses WebSocket for order submission",
-          "// Make sure your server is running at http://localhost:3000"
+          "// Sniper Order Execution Engine",
+          "// Single endpoint: /api/orders/execute",
+          "// HTTP POST → returns orderId → WebSocket upgrade for live updates"
         ]
       }
     }
